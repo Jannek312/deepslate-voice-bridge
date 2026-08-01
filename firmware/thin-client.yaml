@@ -2088,14 +2088,15 @@ micro_wake_word:
     gain_factor: 4
   stop_after_detection: false
   models:
-    # DEEPSLATE VARIANT: stock "Okay Nabu" start wake word (the upstream
-    # alexa v2.1 model URL 404s and Okay Nabu fits this device better).
+    # DEEPSLATE VARIANT: community-trained "Hey GLaDOS" start wake word
+    # (vendored v2 model from mat92910/microwakeword, trained by Tater
+    # Totterson; recommended probability_cutoff 0.97).
     # The stock start words (okay_nabu / hey_jarvis / hey_mycroft) were
     # removed on purpose. "stop" stays — it's the reliable barge-in/interrupt
     # word, armed only while the assistant is replying (see on_phase below).
     # kahrendt/microWakeWord redirects to the OHF-Voice org automatically.
-    - model: https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.json
-      id: okay_nabu
+    - model: models/hey_glados.json
+      id: hey_glados
     - model: https://github.com/kahrendt/microWakeWord/releases/download/stop/stop.json
       id: stop
       internal: true
@@ -2327,11 +2328,11 @@ select:
       # accepts. Spacing mirrors the proven okay_nabu tiers.
       lambda: |-
         if (x == "Slightly sensitive") {
-          id(okay_nabu).set_probability_cutoff(217);   // ~0.85
+          id(hey_glados).set_probability_cutoff(250);   // ~0.98
         } else if (x == "Moderately sensitive") {
-          id(okay_nabu).set_probability_cutoff(178);   // ~0.70
+          id(hey_glados).set_probability_cutoff(247);   // ~0.97 (model's recommended cutoff)
         } else if (x == "Very sensitive") {
-          id(okay_nabu).set_probability_cutoff(140);   // ~0.55
+          id(hey_glados).set_probability_cutoff(240);   // ~0.94
         }
 
 
