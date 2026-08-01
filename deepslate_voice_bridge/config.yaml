@@ -18,6 +18,7 @@ options:
   vendor_id: ""
   org_id: ""
   api_key: ""
+  base_url: "https://app.deepslate.eu"
   voice_id: ""
   language: "auto"
   extra_prompt: ""
@@ -31,6 +32,7 @@ schema:
   vendor_id: str
   org_id: str
   api_key: password
+  base_url: url
   voice_id: str?
   language: str?
   extra_prompt: str?

@@ -55,6 +55,10 @@ class FakeSession:
     def start(self):
         pass
 
+    @property
+    def session_initialized(self):
+        return self.initialized is not None
+
     async def initialize(self, sample_rate, channels):
         self.initialized = (sample_rate, channels)
 

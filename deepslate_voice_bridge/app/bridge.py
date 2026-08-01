@@ -57,8 +57,22 @@ class Bridge(DeepslateSessionListener):
         prompt = build_system_prompt(snapshot, self._settings)
         self._session = create_session(self._settings, prompt, listener=self)
         self._session.start()
-        await self._session.initialize(SESSION_SAMPLE_RATE, SESSION_CHANNELS)
+        # Tools BEFORE initialize: pre-init update_tools only stores the list,
+        # and the SDK sends it right after InitializeSessionRequest.
         await self._session.update_tools(TOOL_DEFINITIONS)
+        # SDK footgun: initialize() silently no-ops while the WS is still
+        # connecting (self._ws is None). Poll it until the server confirms
+        # with SessionReady; initialize() is idempotent once the socket is up.
+        for _ in range(75):  # ~15 s
+            await self._session.initialize(SESSION_SAMPLE_RATE, SESSION_CHANNELS)
+            if self._session.session_initialized:
+                break
+            await asyncio.sleep(0.2)
+        else:
+            logger.warning(
+                "deepslate session not ready after 15s — continuing; "
+                "first mic audio will (re)trigger initialization"
+            )
         logger.info("deepslate session started (%d tools)", len(TOOL_DEFINITIONS))
 
     async def _restart_session(self) -> None:

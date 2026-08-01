@@ -18,6 +18,7 @@ _ENV_MAP = {
     "vendor_id": "DEEPSLATE_VENDOR_ID",
     "org_id": "DEEPSLATE_ORG_ID",
     "api_key": "DEEPSLATE_API_KEY",
+    "base_url": "DEEPSLATE_BASE_URL",
     "voice_id": "DEEPSLATE_VOICE_ID",
     "ha_url": "HA_URL",
     "ha_token": "HA_TOKEN",
@@ -31,6 +32,7 @@ class Settings:
     vendor_id: str = ""
     org_id: str = ""
     api_key: str = ""
+    base_url: str = "https://app.deepslate.eu"
     voice_id: str = ""
     language: str = "auto"
     extra_prompt: str = ""

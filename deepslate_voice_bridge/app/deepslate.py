@@ -56,6 +56,7 @@ def create_session(
         vendor_id=settings.vendor_id,
         organization_id=settings.org_id,
         api_key=settings.api_key,
+        base_url=settings.base_url,
         system_prompt=system_prompt,
     )
     # VAD tuned for a far-field smart speaker: slightly stricter confidence
