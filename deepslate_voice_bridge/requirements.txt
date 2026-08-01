@@ -1,0 +1,4 @@
+websockets>=13.0
+aiohttp>=3.10
+protobuf>=5.27
+deepslate-core>=0.1.15

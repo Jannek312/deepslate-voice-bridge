@@ -1,2 +1,7 @@
 # secrets scratchpad — never commit
 todo.md
+firmware/secrets.yaml
+firmware/.esphome/
+.venv/
+__pycache__/
+.pytest_cache/

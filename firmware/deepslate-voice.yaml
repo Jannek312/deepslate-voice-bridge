@@ -1,0 +1,32 @@
+# ============================================================================
+# Per-device stub for the Deepslate Voice PE (thin-client firmware).
+#
+# Pulls the proven thin-client firmware (wake word + XMOS cleanup on-device,
+# PCM-over-WebSocket to a backend) as a remote package and points it at the
+# Deepslate Voice Bridge add-on via `va_url`.
+#
+# Usage (from repo root):
+#   1. cp firmware/secrets.yaml.example firmware/secrets.yaml   # fill in Wi-Fi
+#   2. Dev (bridge running on your machine):
+#        uvx esphome run firmware/deepslate-voice.yaml --device /dev/cu.usbmodem212201
+#      with va_url below set to ws://<your-machine-LAN-IP>:8080/
+#   3. Prod: set va_url to ws://homeassistant.local:8080/ and re-run.
+# ============================================================================
+substitutions:
+  name: deepslate-voice
+  friendly_name: Deepslate Voice
+  wifi_ssid: !secret wifi_ssid
+  wifi_password: !secret wifi_password
+  ota_password: !secret ota_password
+  api_key: !secret api_key
+  # WebSocket endpoint of the Deepslate Voice Bridge.
+  #   dev : ws://<laptop-LAN-IP>:8080/
+  #   prod: ws://homeassistant.local:8080/
+  va_url: ws://homeassistant.local:8080/
+
+packages:
+  realtime:
+    url: https://github.com/xandervanerven/home-assistant-voice-pe
+    ref: main
+    files: [home-assistant-voice.realtime.yaml]
+    refresh: 0s
