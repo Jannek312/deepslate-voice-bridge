@@ -24,9 +24,11 @@ substitutions:
   #   prod: ws://homeassistant.local:8080/
   va_url: ws://homeassistant.local:8080/
 
+# The thin-client firmware yaml is VENDORED into this repo (firmware/
+# thin-client.yaml) instead of pulled remotely: the upstream fork is a
+# personal variant (alexa-only wake word, dead model URL) — our copy pins a
+# known-good config with the stock "Okay Nabu" wake word. The va_client C++
+# component is still pulled from the fork's git (see external_components in
+# thin-client.yaml).
 packages:
-  realtime:
-    url: https://github.com/xandervanerven/home-assistant-voice-pe
-    ref: main
-    files: [home-assistant-voice.realtime.yaml]
-    refresh: 0s
+  realtime: !include thin-client.yaml
