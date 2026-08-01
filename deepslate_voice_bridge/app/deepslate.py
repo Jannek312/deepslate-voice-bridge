@@ -59,12 +59,13 @@ def create_session(
         base_url=settings.base_url,
         system_prompt=system_prompt,
     )
-    # VAD tuned for a far-field smart speaker: slightly stricter confidence
-    # than the SDK default and a longer stop window so natural mid-sentence
-    # pauses don't cut the user off. Revisit after live testing.
+    # VAD tuned from live far-field measurements (2026-08-01): the XMOS-
+    # processed mic yields speech RMS of only 0.009-0.04 full scale, so the
+    # volume gate must stay at the SDK default 0.01 — 0.05 swallowed whole
+    # utterances. Longer stop window so natural pauses don't cut the user off.
     vad = VadConfig(
-        confidence_threshold=0.6,
-        min_volume=0.05,
+        confidence_threshold=0.5,
+        min_volume=0.01,
         start_duration_ms=100,
         stop_duration_ms=700,
         backbuffer_duration_ms=1000,

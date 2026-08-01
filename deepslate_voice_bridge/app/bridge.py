@@ -156,6 +156,7 @@ class Bridge(DeepslateSessionListener):
         if not pcm24k:
             return
         self._last_activity = time.monotonic()
+        self._log_mic_level(pcm24k)
         if self._session is not None and self._session_ready:
             await self._session.send_audio(pcm24k, SESSION_SAMPLE_RATE, SESSION_CHANNELS)
             return
@@ -167,6 +168,23 @@ class Bridge(DeepslateSessionListener):
         while self._buffered_bytes > MAX_BUFFERED_BYTES and self._buffer:
             dropped = self._buffer.pop(0)
             self._buffered_bytes -= len(dropped)
+
+    def _log_mic_level(self, pcm: bytes) -> None:
+        """~1/s diagnostic: RMS + peak of forwarded mic audio, as a fraction of
+        full scale — directly comparable to the VAD's min_volume gate."""
+        now = time.monotonic()
+        if now - getattr(self, "_last_level_log", 0.0) < 1.0:
+            return
+        self._last_level_log = now
+        import array
+
+        samples = array.array("h")
+        samples.frombytes(pcm)
+        if not samples:
+            return
+        peak = max(abs(s) for s in samples) / 32768
+        rms = (sum(s * s for s in samples) / len(samples)) ** 0.5 / 32768
+        logger.info("mic level: rms=%.4f peak=%.4f (%d samples)", rms, peak, len(samples))
 
     async def on_disconnect(self) -> None:
         self._closed = True
@@ -192,7 +210,7 @@ class Bridge(DeepslateSessionListener):
     async def on_vad_state_event(
         self, from_state: str, to_state: str, session_time_ms: int, packet_id: int
     ) -> None:
-        logger.debug("vad %s -> %s", from_state, to_state)
+        logger.info("vad %s -> %s", from_state, to_state)
         if from_state == "SPEECH_ENDING" and to_state == "SILENCE":
             # End of user turn: model is now working on a reply.
             if not self._suppressed:
@@ -209,6 +227,7 @@ class Bridge(DeepslateSessionListener):
         await self._conn.send_phase("listening")
 
     async def on_response_begin(self, turn_id: int = 0) -> None:
+        logger.info("response begin (turn %d)", turn_id)
         self._replying = False
 
     async def on_audio_chunk(
