@@ -35,6 +35,14 @@
 ### Deepslate session config
 `InitializeSessionRequest`: input line 16000/1/SIGNED_16_BIT; output line 24000/1/SIGNED_16_BIT (no resampling anywhere); `vad_configuration` (confidence 0.6, min_volume 0.05, start 96ms, stop 700ms, backbuffer 1s — tune live); `inference_configuration.system_prompt` built at session start from HA areas/lights; `tts_configuration.hosted.voice_ref.voice_id` from config (mode HIGH_QUALITY); `supports_playback_reporting=false` (device reports no playback position; server estimates). Then `UpdateToolDefinitionsRequest` immediately after init. Audio sent as `UserInput{packet_id: monotonic, mode: <UserInput mode decided in Task 4 from deepslate-pipecat reference>, audio_data}`.
 
+> **DEVIATION 2 (recorded during execution):** Deepslate terminates sessions
+> after 30 s without protocol messages, and Jannek prefers no parked sessions.
+> Sessions are therefore **lazy**: opened on `wake` (mic audio buffered until
+> `SessionReady`, connect overlaps the utterance), closed by the server's
+> inactivity cut, which the bridge treats as normal end-of-conversation. The
+> "device connects → ensure session" row below is superseded; each wake also
+> refreshes the HA snapshot.
+
 ### Event mapping (bridge core)
 | Trigger | Action |
 |---|---|
