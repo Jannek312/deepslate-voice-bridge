@@ -32,8 +32,10 @@ class FakeConn:
 class FakeHA:
     def __init__(self):
         self.calls = []
+        self.snapshots = 0
 
     async def lights_snapshot(self):
+        self.snapshots += 1
         return SNAPSHOT
 
     async def call_service(self, domain, service, data):
@@ -66,7 +68,7 @@ class FakeSession:
         self.tools = tools
 
     async def send_audio(self, pcm, sample_rate, channels, trigger=None):
-        self.audio.append((pcm, sample_rate, channels, trigger))
+        self.audio.append((pcm, sample_rate, channels))
 
     async def send_tool_response(self, call_id, result):
         self.tool_responses.append((call_id, result))
@@ -80,24 +82,51 @@ async def bridge(monkeypatch):
     FakeSession.instances = []
     monkeypatch.setattr(bridge_mod, "create_session", lambda s, p, listener: FakeSession())
     conn = FakeConn()
-    b = Bridge(conn, Settings(vendor_id="v", org_id="o", api_key="k"), FakeHA())
+    ha = FakeHA()
+    b = Bridge(conn, Settings(vendor_id="v", org_id="o", api_key="k"), ha)
     await b.start()
     b.conn = conn
-    b.session = FakeSession.instances[-1]
+    b.ha = ha
     return b
 
 
-async def test_start_initializes_session_and_tools(bridge):
-    assert bridge.session.initialized == (24000, 1)
-    names = {t["function"]["name"] for t in bridge.session.tools}
-    assert names == {"control_lights", "get_lights"}
+async def wake(b):
+    """Wake and complete the session-open handshake like the real SDK would."""
+    await b.on_wake()
+    await b._open_task
+    await b.on_session_initialized()  # SDK fires this on SessionReady
+    await asyncio.sleep(0)  # let the snapshot-refresh task run
+    return FakeSession.instances[-1]
+
+
+async def test_start_does_not_open_session(bridge):
+    assert bridge._session is None
+    assert FakeSession.instances == []
+
+
+async def test_wake_opens_session_with_tools(bridge):
+    session = await wake(bridge)
+    assert session.initialized == (24000, 1)
+    assert {t["function"]["name"] for t in session.tools} == {"control_lights", "get_lights"}
+    assert bridge.ha.snapshots >= 2  # start + wake refresh
+
+
+async def test_audio_buffered_until_ready(bridge):
+    await bridge.on_wake()
+    await bridge._open_task
+    session = FakeSession.instances[-1]
+    await bridge.on_audio(b"\x01\x00" * 160)
+    assert session.audio == []  # not ready yet -> buffered
+    await bridge.on_session_initialized()
+    assert len(session.audio) == 1  # buffer flushed
+    await bridge.on_audio(b"\x01\x00" * 160)
+    assert len(session.audio) == 2  # now direct
 
 
 async def test_full_turn_phase_flow(bridge):
-    await bridge.on_wake()
-    await bridge.on_audio(b"\x00\x00" * 160)  # 160 samples @16k -> ~240 @24k
-    assert len(bridge.session.audio) == 1
-    pcm, rate, ch, trigger = bridge.session.audio[0]
+    session = await wake(bridge)
+    await bridge.on_audio(b"\x00\x00" * 160)
+    (pcm, rate, ch) = session.audio[-1]
     assert (rate, ch) == (24000, 1)
 
     await bridge.on_vad_state_event("SPEECH", "SPEECH_ENDING", 0, 1)
@@ -116,32 +145,31 @@ async def test_full_turn_phase_flow(bridge):
 
 
 async def test_barge_in_sends_listening(bridge):
-    await bridge.on_wake()
+    await wake(bridge)
     await bridge.on_response_begin(1)
     await bridge.on_audio_chunk(b"\x11\x22", 24000, 1, None)
     await bridge.on_playback_buffer_clear()
     assert bridge.conn.phases[-1] == "listening"
-    # next chunk of the *new* response re-enters replying
     await bridge.on_response_begin(2)
     await bridge.on_audio_chunk(b"\x55\x66", 24000, 1, None)
     assert bridge.conn.phases[-1] == "replying"
 
 
 async def test_interrupt_suppresses_audio_until_wake(bridge):
-    await bridge.on_wake()
+    await wake(bridge)
     await bridge.on_response_begin(1)
     await bridge.on_audio_chunk(b"\x11\x22", 24000, 1, None)
     await bridge.on_interrupt()
     await bridge.on_audio_chunk(b"\x33\x44", 24000, 1, None)
     assert bridge.conn.audio == b"\x11\x22"  # second chunk dropped
-    # a fresh wake lifts suppression
-    await bridge.on_wake()
+    await bridge.on_wake()  # fresh wake lifts suppression (session already open)
     await bridge.on_response_begin(2)
     await bridge.on_audio_chunk(b"\x55\x66", 24000, 1, None)
     assert bridge.conn.audio == b"\x11\x22\x55\x66"
 
 
 async def test_real_speech_lifts_suppression(bridge):
+    await wake(bridge)
     await bridge.on_interrupt()
     await bridge.on_vad_state_event("SILENCE", "SPEECH", 0, 1)
     await bridge.on_response_begin(1)
@@ -150,45 +178,52 @@ async def test_real_speech_lifts_suppression(bridge):
 
 
 async def test_tool_call_roundtrip(bridge):
+    session = await wake(bridge)
     await bridge.on_tool_call("call-1", "control_lights", {"area": "bedroom", "action": "on"})
-    assert bridge.session.tool_responses == [("call-1", "OK: turned on all lights in Bedroom.")]
+    assert session.tool_responses == [("call-1", "OK: turned on all lights in Bedroom.")]
+    assert bridge.ha.calls == [("light", "turn_on", {"area_id": "bedroom"})]
 
 
 async def test_tool_failure_still_answers(bridge):
+    session = await wake(bridge)
     await bridge.on_tool_call("call-2", "control_lights", {"area": "garage", "action": "on"})
-    call_id, result = bridge.session.tool_responses[-1]
-    assert call_id == "call-2"
-    assert result.startswith("Error")
+    call_id, result = session.tool_responses[-1]
+    assert call_id == "call-2" and result.startswith("Error")
 
 
-async def test_fatal_error_recreates_session(bridge):
-    first = bridge.session
+async def test_inactivity_close_is_quiet_teardown(bridge):
+    session = await wake(bridge)
+    bridge.conn.phases.clear()
+    await bridge.on_error("ERROR_SESSION", "Session closed due to inactivity.")
+    await asyncio.sleep(0.01)
+    assert session.closed
+    assert bridge._session is None
+    assert bridge.conn.phases == []  # no unstick needed — device is idle anyway
+
+
+async def test_wake_after_inactivity_opens_fresh_session(bridge):
+    await wake(bridge)
+    await bridge.on_error("ERROR_SESSION", "Session closed due to inactivity.")
+    await asyncio.sleep(0.01)
+    second = await wake(bridge)
+    assert len(FakeSession.instances) == 2
+    assert second.session_initialized
+
+
+async def test_mid_conversation_death_unsticks_device(bridge):
+    import time
+
+    session = await wake(bridge)
+    await bridge.on_audio(b"\x01\x00" * 160)  # marks recent activity
+    bridge._last_activity = time.monotonic()
     await bridge.on_fatal_error(RuntimeError("boom"))
+    await asyncio.sleep(0.01)
+    assert session.closed
     assert bridge.conn.phases[-1] == "idle"
-    await asyncio.wait_for(bridge._reconnect_task, timeout=2)
-    assert first.closed
-    assert len(FakeSession.instances) == 2  # a fresh session was created
 
 
 async def test_disconnect_closes_session(bridge):
+    session = await wake(bridge)
     await bridge.on_disconnect()
-    assert bridge.session.closed
-
-
-async def test_idle_keepalive_sends_silence(bridge, monkeypatch):
-    from deepslate.core import TriggerMode
-
-    monkeypatch.setattr(bridge_mod, "KEEPALIVE_INTERVAL_S", 0.05)
-    monkeypatch.setattr(bridge_mod, "KEEPALIVE_CHECK_S", 0.02)
-    # restart the keepalive loop with the fast intervals
-    bridge._keepalive_task.cancel()
-    bridge._last_activity = 0.0
-    bridge._keepalive_task = asyncio.create_task(bridge._keepalive_loop())
-    await asyncio.sleep(0.2)
-    silences = [a for a in bridge.session.audio if a[3] == TriggerMode.NO_TRIGGER]
-    assert silences, "expected keepalive silence frames"
-    pcm, rate, ch, _ = silences[0]
-    assert pcm == b"\x00" * 960 and (rate, ch) == (24000, 1)
-    # real mic audio resets the idle clock and is NOT NO_TRIGGER
-    await bridge.on_audio(b"\x01\x00" * 32)
-    assert bridge.session.audio[-1][3] is None
+    assert session.closed
+    assert bridge._session is None
