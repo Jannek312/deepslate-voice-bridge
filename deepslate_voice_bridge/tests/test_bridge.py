@@ -65,8 +65,8 @@ class FakeSession:
     async def update_tools(self, tools):
         self.tools = tools
 
-    async def send_audio(self, pcm, sample_rate, channels):
-        self.audio.append((pcm, sample_rate, channels))
+    async def send_audio(self, pcm, sample_rate, channels, trigger=None):
+        self.audio.append((pcm, sample_rate, channels, trigger))
 
     async def send_tool_response(self, call_id, result):
         self.tool_responses.append((call_id, result))
@@ -97,7 +97,7 @@ async def test_full_turn_phase_flow(bridge):
     await bridge.on_wake()
     await bridge.on_audio(b"\x00\x00" * 160)  # 160 samples @16k -> ~240 @24k
     assert len(bridge.session.audio) == 1
-    pcm, rate, ch = bridge.session.audio[0]
+    pcm, rate, ch, trigger = bridge.session.audio[0]
     assert (rate, ch) == (24000, 1)
 
     await bridge.on_vad_state_event("SPEECH", "SPEECH_ENDING", 0, 1)
@@ -173,3 +173,22 @@ async def test_fatal_error_recreates_session(bridge):
 async def test_disconnect_closes_session(bridge):
     await bridge.on_disconnect()
     assert bridge.session.closed
+
+
+async def test_idle_keepalive_sends_silence(bridge, monkeypatch):
+    from deepslate.core import TriggerMode
+
+    monkeypatch.setattr(bridge_mod, "KEEPALIVE_INTERVAL_S", 0.05)
+    monkeypatch.setattr(bridge_mod, "KEEPALIVE_CHECK_S", 0.02)
+    # restart the keepalive loop with the fast intervals
+    bridge._keepalive_task.cancel()
+    bridge._last_activity = 0.0
+    bridge._keepalive_task = asyncio.create_task(bridge._keepalive_loop())
+    await asyncio.sleep(0.2)
+    silences = [a for a in bridge.session.audio if a[3] == TriggerMode.NO_TRIGGER]
+    assert silences, "expected keepalive silence frames"
+    pcm, rate, ch, _ = silences[0]
+    assert pcm == b"\x00" * 960 and (rate, ch) == (24000, 1)
+    # real mic audio resets the idle clock and is NOT NO_TRIGGER
+    await bridge.on_audio(b"\x01\x00" * 32)
+    assert bridge.session.audio[-1][3] is None

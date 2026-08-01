@@ -20,8 +20,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
-from deepslate.core import DeepslateSessionListener
+from deepslate.core import DeepslateSessionListener, TriggerMode
 
 from app.audio import Upsampler16to24
 from app.config import Settings
@@ -34,6 +35,14 @@ logger = logging.getLogger(__name__)
 
 RECONNECT_INITIAL_S = 1.0
 RECONNECT_MAX_S = 30.0
+
+# Deepslate terminates sessions after 30 s without protocol messages. While
+# the device is idle (mic gated off), send a short burst of silence with
+# NO_TRIGGER — it doesn't trip the server VAD and doesn't trigger inference,
+# but counts as activity.
+KEEPALIVE_INTERVAL_S = 15.0
+KEEPALIVE_CHECK_S = 2.0
+_KEEPALIVE_SILENCE = b"\x00" * (480 * 2)  # 20 ms mono PCM16 @ 24 kHz
 
 
 class Bridge(DeepslateSessionListener):
@@ -48,6 +57,8 @@ class Bridge(DeepslateSessionListener):
         self._replying = False     # this turn already produced audible audio
         self._closed = False
         self._reconnect_task: asyncio.Task | None = None
+        self._keepalive_task: asyncio.Task | None = None
+        self._last_activity = time.monotonic()
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -74,6 +85,9 @@ class Bridge(DeepslateSessionListener):
                 "first mic audio will (re)trigger initialization"
             )
         logger.info("deepslate session started (%d tools)", len(TOOL_DEFINITIONS))
+        self._last_activity = time.monotonic()
+        if self._keepalive_task is None or self._keepalive_task.done():
+            self._keepalive_task = asyncio.create_task(self._keepalive_loop())
 
     async def _restart_session(self) -> None:
         backoff = RECONNECT_INITIAL_S
@@ -89,6 +103,27 @@ class Bridge(DeepslateSessionListener):
                 logger.warning("session restart failed (%s); retrying in %.0fs", e, backoff)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, RECONNECT_MAX_S)
+
+    async def _keepalive_loop(self) -> None:
+        """Keep the idle session alive across Deepslate's 30 s inactivity cut."""
+        while not self._closed:
+            await asyncio.sleep(KEEPALIVE_CHECK_S)
+            session = self._session
+            if session is None or not session.session_initialized:
+                continue
+            if time.monotonic() - self._last_activity < KEEPALIVE_INTERVAL_S:
+                continue
+            try:
+                await session.send_audio(
+                    _KEEPALIVE_SILENCE,
+                    SESSION_SAMPLE_RATE,
+                    SESSION_CHANNELS,
+                    trigger=TriggerMode.NO_TRIGGER,
+                )
+                self._last_activity = time.monotonic()
+                logger.debug("keepalive silence sent")
+            except Exception as e:
+                logger.warning("keepalive send failed: %r", e)
 
     def _schedule_restart(self) -> None:
         if self._closed:
@@ -121,12 +156,15 @@ class Bridge(DeepslateSessionListener):
             return
         pcm24k = self._up.process(pcm16k)
         if pcm24k:
+            self._last_activity = time.monotonic()
             await self._session.send_audio(pcm24k, SESSION_SAMPLE_RATE, SESSION_CHANNELS)
 
     async def on_disconnect(self) -> None:
         self._closed = True
         if self._reconnect_task is not None:
             self._reconnect_task.cancel()
+        if self._keepalive_task is not None:
+            self._keepalive_task.cancel()
         if self._session is not None:
             await self._session.close()
             self._session = None
