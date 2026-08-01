@@ -22,7 +22,9 @@ substitutions:
   # WebSocket endpoint of the Deepslate Voice Bridge.
   #   dev : ws://<laptop-LAN-IP>:8080/
   #   prod: ws://homeassistant.local:8080/
-  va_url: ws://homeassistant.local:8080/
+  # DEV: bridge running on the Mac. Switch to ws://homeassistant.local:8080/
+  # for the add-on deployment and re-flash (or OTA-update) once.
+  va_url: ws://192.168.178.167:8080/
 
 # The thin-client firmware yaml is VENDORED into this repo (firmware/
 # thin-client.yaml) instead of pulled remotely: the upstream fork is a
