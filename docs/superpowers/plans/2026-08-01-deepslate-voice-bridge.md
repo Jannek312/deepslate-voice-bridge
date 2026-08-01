@@ -120,6 +120,16 @@ def test_proto_roundtrip():
 
 - [ ] Test with `aiohttp.test_utils` fake HA server asserting auth header, `POST /api/template` body, `POST /api/services/light/turn_on` passthrough, snapshot parsing. Implement. Commit.
 
+> **DEVIATION (recorded during execution):** Task 4 is implemented with the official
+> `deepslate-core` SDK (found on PyPI during Task 4 Step 1) instead of a hand-rolled
+> protobuf client. It provides `DeepslateSession` + `DeepslateSessionListener` with
+> exactly the events the bridge needs, internal reconnect-with-backoff, and buffered
+> sends. Consequences: (a) vendored proto/generated pb2 removed; (b) the session runs
+> at 24 kHz both directions (SDK uses one audio line config), so the bridge upsamples
+> mic audio 16k→24k in `app/audio.py` (same as the OpenAI reference add-on does);
+> (c) audio `UserInput.mode` follows the SDK default `IMMEDIATE`; (d) tool defs use
+> the SDK's `FunctionToolDict` shape `{"type":"function","function":{name,description,parameters}}`.
+
 ### Task 4: Deepslate client (deepslate_client.py)
 
 **Interfaces produced:**
