@@ -38,3 +38,19 @@ def test_chunking_invariance():
 
 def test_empty_input():
     assert Upsampler16to24().process(b"") == b""
+
+
+def test_apply_gain_scales_and_clamps():
+    from app.audio import apply_gain
+
+    pcm = _pcm([1000, -1000, 20000, -20000])
+    assert _values(apply_gain(pcm, 2.0)) == [2000, -2000, 32767, -32768]
+    assert apply_gain(pcm, 1.0) is pcm  # no-op passthrough
+
+
+def test_levels():
+    from app.audio import levels
+
+    rms, peak = levels(_pcm([0, 16384, -16384, 0]))
+    assert abs(peak - 0.5) < 0.01
+    assert 0.3 < rms < 0.4

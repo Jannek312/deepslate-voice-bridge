@@ -15,6 +15,29 @@ from __future__ import annotations
 import array
 
 
+def apply_gain(pcm: bytes, gain: float) -> bytes:
+    """Scale mono PCM16 by `gain`, clamping to int16 range."""
+    if gain == 1.0 or not pcm:
+        return pcm
+    samples = array.array("h")
+    samples.frombytes(pcm)
+    out = array.array(
+        "h", (max(-32768, min(32767, int(s * gain))) for s in samples)
+    )
+    return out.tobytes()
+
+
+def levels(pcm: bytes) -> tuple[float, float]:
+    """(rms, peak) of mono PCM16 as fractions of full scale."""
+    samples = array.array("h")
+    samples.frombytes(pcm)
+    if not samples:
+        return 0.0, 0.0
+    peak = max(abs(s) for s in samples) / 32768
+    rms = (sum(s * s for s in samples) / len(samples)) ** 0.5 / 32768
+    return rms, peak
+
+
 class Upsampler16to24:
     """Phase-accumulator linear interpolator, 2 input samples → 3 output samples."""
 

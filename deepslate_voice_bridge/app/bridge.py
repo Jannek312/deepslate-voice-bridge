@@ -31,7 +31,7 @@ import time
 
 from deepslate.core import DeepslateSessionListener
 
-from app.audio import Upsampler16to24
+from app.audio import Upsampler16to24, apply_gain, levels
 from app.config import Settings
 from app.deepslate import SESSION_CHANNELS, SESSION_SAMPLE_RATE, build_system_prompt, create_session
 from app.device_server import DeviceConnection
@@ -243,8 +243,13 @@ class Bridge(DeepslateSessionListener):
             )
         if not self._replying:
             self._replying = True
+            rms, peak = levels(pcm_bytes)
+            logger.info(
+                "reply audio levels before gain: rms=%.3f peak=%.3f (gain %.1fx)",
+                rms, peak, self._settings.output_gain,
+            )
             await self._conn.send_phase("replying")
-        await self._conn.send_audio(pcm_bytes)
+        await self._conn.send_audio(apply_gain(pcm_bytes, self._settings.output_gain))
 
     async def on_response_end(self, turn_id: int = 0) -> None:
         if self._replying and not self._suppressed:

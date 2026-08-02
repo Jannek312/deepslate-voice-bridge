@@ -1,5 +1,5 @@
 name: Deepslate Voice Bridge
-version: "0.1.1"
+version: "0.1.2"
 slug: deepslate_voice_bridge
 description: >-
   Connects Home Assistant Voice PE devices (thin-client firmware) to
@@ -22,6 +22,7 @@ options:
   voice_id: ""
   language: "auto"
   extra_prompt: ""
+  output_gain: 2.5
   port: 8080
   follow_up_ms: 8000
   follow_up_open_delay_ms: 700
@@ -36,6 +37,7 @@ schema:
   voice_id: str?
   language: str?
   extra_prompt: str?
+  output_gain: float(0.1,10.0)
   port: port
   follow_up_ms: int(0,60000)
   follow_up_open_delay_ms: int(0,5000)

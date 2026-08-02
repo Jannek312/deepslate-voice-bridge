@@ -36,6 +36,7 @@ class Settings:
     voice_id: str = ""
     language: str = "auto"
     extra_prompt: str = ""
+    output_gain: float = 1.0
     port: int = 8080
     ha_url: str = ""
     ha_token: str = ""
@@ -66,6 +67,7 @@ class Settings:
         settings.follow_up_open_delay_ms = int(settings.follow_up_open_delay_ms)
         settings.wake_open_delay_ms = int(settings.wake_open_delay_ms)
         settings.playback_prebuffer_ms = int(settings.playback_prebuffer_ms)
+        settings.output_gain = float(settings.output_gain)
 
         # Add-on mode: no explicit HA target means "use the Supervisor proxy".
         if not settings.ha_url:
