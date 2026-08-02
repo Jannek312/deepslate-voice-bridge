@@ -282,6 +282,13 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
+  # DEEPSLATE VARIANT: color override for the session-state effects
+  # (Listening For Command / Thinking / Replying), packed 0xRRGGBB.
+  # 0 = no override (effects use the led_ring entity color, stock behavior).
+  - id: va_state_color
+    type: int
+    restore_value: no
+    initial_value: '0'
 
   # Global variable tracking if the dial was recently touched.
   - id: dial_touched
@@ -790,9 +797,16 @@ light:
           name: "Listening For Command"
           update_interval: 50ms
           lambda: |-
-            auto light_color = id(led_ring).current_values;
-            Color color(light_color.get_red() * 255, light_color.get_green() * 255,
-                  light_color.get_blue() * 255);
+            Color color;
+            if (id(va_state_color) != 0) {
+              color = Color((id(va_state_color) >> 16) & 0xFF,
+                            (id(va_state_color) >> 8) & 0xFF,
+                            id(va_state_color) & 0xFF);
+            } else {
+              auto light_color = id(led_ring).current_values;
+              color = Color(light_color.get_red() * 255, light_color.get_green() * 255,
+                    light_color.get_blue() * 255);
+            }
             for (uint8_t i = 0; i < 12; i++) {
               if (i == id(global_led_animation_index) % 12) {
                 it[i] = color;
@@ -822,9 +836,16 @@ light:
               brightness_step = 0;
               brightness_decreasing = true;
             }
-            auto light_color = id(led_ring).current_values;
-            Color color(light_color.get_red() * 255, light_color.get_green() * 255,
-                  light_color.get_blue() * 255);
+            Color color;
+            if (id(va_state_color) != 0) {
+              color = Color((id(va_state_color) >> 16) & 0xFF,
+                            (id(va_state_color) >> 8) & 0xFF,
+                            id(va_state_color) & 0xFF);
+            } else {
+              auto light_color = id(led_ring).current_values;
+              color = Color(light_color.get_red() * 255, light_color.get_green() * 255,
+                    light_color.get_blue() * 255);
+            }
             for (uint8_t i = 0; i < 12; i++) {
               if (i == id(global_led_animation_index) % 12) {
                 it[i] = color * uint8_t(255/brightness_step_number*(brightness_step_number-brightness_step));
@@ -847,9 +868,16 @@ light:
           update_interval: 50ms
           lambda: |-
             id(global_led_animation_index) = (12 + id(global_led_animation_index) - 1) % 12;
-            auto light_color = id(led_ring).current_values;
-            Color color(light_color.get_red() * 255, light_color.get_green() * 255,
-                  light_color.get_blue() * 255);
+            Color color;
+            if (id(va_state_color) != 0) {
+              color = Color((id(va_state_color) >> 16) & 0xFF,
+                            (id(va_state_color) >> 8) & 0xFF,
+                            id(va_state_color) & 0xFF);
+            } else {
+              auto light_color = id(led_ring).current_values;
+              color = Color(light_color.get_red() * 255, light_color.get_green() * 255,
+                    light_color.get_blue() * 255);
+            }
             for (uint8_t i = 0; i < 12; i++) {
               if (i == (id(global_led_animation_index)) % 12) {
                 it[i] = color;
@@ -1370,6 +1398,7 @@ script:
   # Nothing (Either LED ring off or LED ring on if the user decided to turn the user facing LED ring on)
   - id: control_leds_voice_assistant_idle_phase
     then:
+      - lambda: 'id(va_state_color) = 0;'
       # va-direct: when the va_client WebSocket is connected, show a gentle blue
       # breathing pulse at idle so there's a visible "ready" state (as the user
       # wants, like the reference firmware) — but ONLY while the user-facing
@@ -1410,11 +1439,9 @@ script:
   # Fast clockwise spin of the LED ring.
   - id: control_leds_voice_assistant_listening_for_command_phase
     then:
+      - lambda: 'id(va_state_color) = 0x59BFFF;'
       - light.turn_on:
           brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
-          red: 45%
-          green: 85%
-          blue: 100%
           id: voice_assistant_leds
           effect: "Listening For Command"
 
@@ -1422,22 +1449,18 @@ script:
   # (server-VAD hint from the bridge).
   - id: control_leds_user_speaking
     then:
+      - lambda: 'id(va_state_color) = 0x26E63C;'
       - light.turn_on:
           brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
-          red: 15%
-          green: 100%
-          blue: 25%
           id: voice_assistant_leds
           effect: "Listening For Command"
 
   # DEEPSLATE VARIANT: dark blue pulse while a tool call executes.
   - id: control_leds_tool_call
     then:
+      - lambda: 'id(va_state_color) = 0x1023CC;'
       - light.turn_on:
           brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
-          red: 0%
-          green: 15%
-          blue: 100%
           id: voice_assistant_leds
           effect: "Thinking"
 
@@ -1445,11 +1468,9 @@ script:
   # The spin stops and the 2 LEDs that are currently on and blinking indicating the commend is being processed.
   - id: control_leds_voice_assistant_thinking_phase
     then:
+      - lambda: 'id(va_state_color) = 0xF2F2F2;'
       - light.turn_on:
           brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
-          red: 100%
-          green: 100%
-          blue: 100%
           id: voice_assistant_leds
           effect: "Thinking"
 
@@ -1457,11 +1478,9 @@ script:
   # Fast anticlockwise spin of the LED ring.
   - id: control_leds_voice_assistant_replying_phase
     then:
+      - lambda: 'id(va_state_color) = 0xFF9914;'
       - light.turn_on:
           brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
-          red: 100%
-          green: 60%
-          blue: 0%
           id: voice_assistant_leds
           effect: "Replying"
 
