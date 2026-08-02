@@ -1,0 +1,6 @@
+# Base images for Supervisor-local builds. Plain upstream Python (Debian slim,
+# multi-arch) — the bridge needs nothing from the HA Alpine base images, and
+# python:3.12-slim ships pip + manylinux wheel support out of the box.
+build_from:
+  aarch64: python:3.12-slim
+  amd64: python:3.12-slim
