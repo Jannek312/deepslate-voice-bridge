@@ -4,7 +4,7 @@ slug: deepslate_voice_bridge
 description: >-
   Connects Home Assistant Voice PE devices (thin-client firmware) to
   Deepslate Realtime (Opal speech-to-speech) with light control tools.
-url: https://github.com/jannek/deepslate-voice-bridge
+url: https://github.com/Jannek312/deepslate-voice-bridge
 arch:
   - aarch64
   - amd64
