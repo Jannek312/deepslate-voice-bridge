@@ -276,6 +276,13 @@ globals:
     type: int
     restore_value: no
     initial_value: ${voice_assist_not_ready_phase_id}
+  # DEEPSLATE VARIANT: LED-only hint from the bridge (0 none, 1 user speaking,
+  # 2 tool call). Cleared on every real phase transition.
+  - id: va_led_hint
+    type: int
+    restore_value: no
+    initial_value: '0'
+
   # Global variable tracking if the dial was recently touched.
   - id: dial_touched
     type: bool
@@ -1252,6 +1259,10 @@ script:
             id(control_leds_dial_touched).execute();
           } else if (id(timer_ringing).state) {
             id(control_leds_timer_ringing).execute();
+          } else if (id(va_led_hint) == 1) {
+            id(control_leds_user_speaking).execute();
+          } else if (id(va_led_hint) == 2) {
+            id(control_leds_tool_call).execute();
           } else if (id(voice_assistant_phase) == ${voice_assist_waiting_for_command_phase_id}) {
             id(control_leds_voice_assistant_waiting_for_command_phase).execute();
           } else if (id(voice_assistant_phase) == ${voice_assist_listening_for_command_phase_id}) {
@@ -1401,8 +1412,34 @@ script:
     then:
       - light.turn_on:
           brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
+          red: 45%
+          green: 85%
+          blue: 100%
           id: voice_assistant_leds
           effect: "Listening For Command"
+
+  # DEEPSLATE VARIANT: green spin while the user is audibly speaking
+  # (server-VAD hint from the bridge).
+  - id: control_leds_user_speaking
+    then:
+      - light.turn_on:
+          brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
+          red: 15%
+          green: 100%
+          blue: 25%
+          id: voice_assistant_leds
+          effect: "Listening For Command"
+
+  # DEEPSLATE VARIANT: dark blue pulse while a tool call executes.
+  - id: control_leds_tool_call
+    then:
+      - light.turn_on:
+          brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
+          red: 0%
+          green: 15%
+          blue: 100%
+          id: voice_assistant_leds
+          effect: "Thinking"
 
   # Script executed when the voice assistant is thinking to a command
   # The spin stops and the 2 LEDs that are currently on and blinking indicating the commend is being processed.
@@ -1410,6 +1447,9 @@ script:
     then:
       - light.turn_on:
           brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
+          red: 100%
+          green: 100%
+          blue: 100%
           id: voice_assistant_leds
           effect: "Thinking"
 
@@ -1419,6 +1459,9 @@ script:
     then:
       - light.turn_on:
           brightness: !lambda return max( id(led_ring).current_values.get_brightness() , 0.2f );
+          red: 100%
+          green: 60%
+          blue: 0%
           id: voice_assistant_leds
           effect: "Replying"
 
@@ -1898,10 +1941,10 @@ external_components:
   # fetch the latest C++ for that ref. To iterate on the C++ locally instead,
   # swap this for:
   #   - source: {type: local, path: esphome/components}
+  # DEEPSLATE VARIANT: va_client is vendored locally (LED-hint patch).
   - source:
-      type: git
-      url: https://github.com/xandervanerven/home-assistant-voice-pe
-      ref: main
+      type: local
+      path: components
     components: [va_client]
     refresh: 0s
 
@@ -1945,13 +1988,23 @@ va_client:
   speaker: media_resampling_speaker
   on_phase:
     - lambda: |-
-        if (phase == "idle") {
+        if (phase == "user_speech") {
+          id(va_led_hint) = 1;
+        } else if (phase == "tool_call") {
+          id(va_led_hint) = 2;
+        } else if (phase == "hint_clear") {
+          id(va_led_hint) = 0;
+        } else if (phase == "idle") {
+          id(va_led_hint) = 0;
           id(voice_assistant_phase) = ${voice_assist_idle_phase_id};
         } else if (phase == "listening") {
+          id(va_led_hint) = 0;
           id(voice_assistant_phase) = ${voice_assist_listening_for_command_phase_id};
         } else if (phase == "thinking") {
+          id(va_led_hint) = 0;
           id(voice_assistant_phase) = ${voice_assist_thinking_phase_id};
         } else if (phase == "replying") {
+          id(va_led_hint) = 0;
           id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
         }
     - script.execute: control_leds

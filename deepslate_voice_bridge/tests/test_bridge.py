@@ -182,6 +182,19 @@ async def test_tool_call_roundtrip(bridge):
     await bridge.on_tool_call("call-1", "control_lights", {"area": "bedroom", "action": "on"})
     assert session.tool_responses == [("call-1", "OK: turned on all lights in Bedroom.")]
     assert bridge.ha.calls == [("light", "turn_on", {"area_id": "bedroom"})]
+    # LED hints bracket the execution: dark blue during, cleared after
+    assert bridge.conn.phases[-2:] == ["tool_call", "hint_clear"]
+
+
+async def test_user_speech_led_hint(bridge):
+    await wake(bridge)
+    await bridge.on_vad_state_event("SILENCE", "SPEECH_STARTING", 0, 1)
+    assert "user_speech" not in bridge.conn.phases  # STARTING alone is not speech
+    await bridge.on_vad_state_event("SPEECH_STARTING", "SPEECH", 0, 1)
+    assert bridge.conn.phases[-1] == "user_speech"
+    await bridge.on_vad_state_event("SPEECH", "SPEECH_ENDING", 0, 1)
+    await bridge.on_vad_state_event("SPEECH_ENDING", "SILENCE", 0, 1)
+    assert bridge.conn.phases[-1] == "thinking"  # real phase clears the hint device-side
 
 
 async def test_tool_failure_still_answers(bridge):

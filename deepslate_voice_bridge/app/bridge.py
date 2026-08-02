@@ -215,10 +215,15 @@ class Bridge(DeepslateSessionListener):
             # End of user turn: model is now working on a reply.
             if not self._suppressed:
                 await self._conn.send_phase("thinking")
-        elif to_state == "SPEECH" and self._suppressed:
-            # Genuine new user speech lifts a stop/flush suppression.
-            logger.info("real speech detected: lifting suppression")
-            self._suppressed = False
+        elif to_state == "SPEECH":
+            if self._suppressed:
+                # Genuine new user speech lifts a stop/flush suppression.
+                logger.info("real speech detected: lifting suppression")
+                self._suppressed = False
+            # LED hint: green ring while the user is audibly speaking. LED-only
+            # on the device (fire_phase_led_), no state-machine impact; cleared
+            # by the next real phase (e.g. "thinking").
+            await self._conn.send_phase("user_speech")
 
     async def on_playback_buffer_clear(self) -> None:
         # User barged in: the firmware flushes its playback queue on the
@@ -258,9 +263,12 @@ class Bridge(DeepslateSessionListener):
 
     async def on_tool_call(self, call_id: str, name: str, params: dict, turn_id=None) -> None:
         logger.info("tool call %s(%s)", name, params)
+        # LED hint: dark blue ring while the tool executes.
+        await self._conn.send_phase("tool_call")
         result = await self._executor.execute(name, params)
         logger.info("tool result: %.200s", result)
         await self._session.send_tool_response(call_id, result)
+        await self._conn.send_phase("hint_clear")
 
     async def on_user_transcription(self, text: str, language=None, turn_id: int = 0) -> None:
         logger.info("user said (%s): %s", language, text)
