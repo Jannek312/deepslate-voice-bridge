@@ -1,5 +1,9 @@
 # secrets scratchpad — never commit
 todo.md
+
+# IDE
+.idea/
+*.iml
 firmware/secrets.yaml
 firmware/.esphome/
 .venv/

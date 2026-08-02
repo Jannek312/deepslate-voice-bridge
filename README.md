@@ -1,45 +1,49 @@
 # Deepslate Voice — Home Assistant Voice PE ↔ Deepslate Realtime
 
-Talk to a Home Assistant Voice PE and have the whole conversation run through
-[Deepslate](https://docs.deepslate.eu/) Opal (speech-to-speech), with your
-Home Assistant lights controlled via tool calls.
+Talk to a Home Assistant Voice PE and have the whole conversation run through [Deepslate](https://docs.deepslate.eu/) Opal (speech-to-speech), with your Home Assistant lights controlled via tool calls.
 
 ```
-Voice PE ──16k PCM / LAN WS──▶ Deepslate Voice Bridge ──protobuf WSS──▶ Deepslate Realtime (Opal)
-  ▲ wake word, AEC, LEDs        (HA add-on, this repo)──HTTP──▶ Home Assistant (lights)
-  └──────24k PCM + phases───────────────┘
+Voice PE ──── 16 kHz PCM / LAN WebSocket ───▶ Deepslate Voice Bridge ── protobuf WSS ──▶ Deepslate Realtime (Opal)
+   ▲                                            (HA add-on, this repo)
+   └──── 24 kHz PCM + phase messages ────────────────┘      └────────── HTTP ──▶ Home Assistant (lights)
 ```
+
+The device keeps wake word detection, echo cancellation and the LED ring on-device (thin-client firmware). The bridge holds one Deepslate Realtime session per conversation — opened on wake word, closed by Deepslate's inactivity timeout — and executes `control_lights` / `get_lights` tool calls against the Home Assistant API. The area and light inventory is read from Home Assistant at session start, so there is nothing to configure per entity.
 
 ## Repository layout
 
 - `deepslate_voice_bridge/` — the Home Assistant **add-on** (Python bridge service + tests)
-- `firmware/` — per-device ESPHome stub for the thin-client firmware
-  (remote package from [xandervanerven/home-assistant-voice-pe](https://github.com/xandervanerven/home-assistant-voice-pe))
-- `repository.json` — makes this repo installable as a HA add-on repository
+- `firmware/` — ESPHome config for the device: `deepslate-voice.yaml` (per-device stub) + `thin-client.yaml` (vendored thin-client firmware, based on [xandervanerven/home-assistant-voice-pe](https://github.com/xandervanerven/home-assistant-voice-pe))
+- `repository.json` — makes this repo installable as a Home Assistant add-on repository
 - `docs/superpowers/` — design spec and implementation plan
 
-## Quick start
+## Installation (Home Assistant)
 
-**Dev (bridge on your laptop):**
+1. Settings → Add-ons → Add-on Store → ⋮ → Repositories → add `https://github.com/Jannek312/deepslate-voice-bridge`
+2. Install **Deepslate Voice Bridge**
+3. Configure it: `vendor_id`, `org_id`, `api_key`, `base_url` (e.g. `https://app.deepslate.eu`), `voice_id` (a Deepslate hosted voice), `language`
+4. Flash the firmware with `va_url: ws://homeassistant.local:8080/` (see below)
 
-```sh
-uv sync
-DEEPSLATE_VENDOR_ID=… DEEPSLATE_ORG_ID=… DEEPSLATE_API_KEY=… DEEPSLATE_VOICE_ID=… \
-HA_URL=https://your-ha HA_TOKEN=… \
-uv run python -m app.main   # from deepslate_voice_bridge/
-```
-
-Flash the device with `va_url` pointing at your laptop:
+## Firmware
 
 ```sh
-cp firmware/secrets.yaml.example firmware/secrets.yaml  # fill in Wi-Fi
+cp firmware/secrets.yaml.example firmware/secrets.yaml   # fill in Wi-Fi + keys
 uvx esphome run firmware/deepslate-voice.yaml --device /dev/cu.usbmodem*
 ```
 
-**Prod:** add this repo as an add-on repository in HA (Settings → Add-ons →
-Add-on store → ⋮ → Repositories), install "Deepslate Voice Bridge", fill in
-the Deepslate credentials, and set the firmware `va_url` to
-`ws://homeassistant.local:8080/`.
+Set the `va_url` substitution in `firmware/deepslate-voice.yaml` to wherever the bridge runs before flashing.
+
+## Development (bridge on your machine)
+
+```sh
+uv sync
+cd deepslate_voice_bridge
+DEEPSLATE_VENDOR_ID=… DEEPSLATE_ORG_ID=… DEEPSLATE_API_KEY=… DEEPSLATE_BASE_URL=… DEEPSLATE_VOICE_ID=… \
+HA_URL=https://your-ha HA_TOKEN=… \
+uv run python -m app.main
+```
+
+Point the firmware's `va_url` at your machine's LAN IP and reflash.
 
 ## Tests
 
