@@ -18,7 +18,12 @@ Assistant API.
 | Option | Description |
 |---|---|
 | `vendor_id` / `org_id` / `api_key` | Deepslate Realtime credentials |
-| `voice_id` | Deepslate hosted voice for TTS output (empty = text-only, not useful on a speaker) |
+| `tts_provider` | `hosted` (Deepslate voice) or `elevenlabs` |
+| `voice_id` | Voice for TTS output: Deepslate hosted voice id, or the ElevenLabs voice id when provider is elevenlabs |
+| `elevenlabs_api_key` / `elevenlabs_model_id` | ElevenLabs credentials (provider `elevenlabs` only) |
+| `elevenlabs_stability` / `_similarity_boost` / `_style` / `_speed` | ElevenLabs voice settings, `-1` = provider default |
+| `elevenlabs_speaker_boost` | Boost similarity to the original speaker |
+| `background_audio_url` | Ambient audio (mp3/flac/stream URL) played on the device's media channel from wake word until the session ends; loops, ducks 12 dB while the assistant speaks. Empty = off |
 | `language` | `auto` or a fixed language, e.g. `German`, `English` |
 | `extra_prompt` | Appended to the generated system prompt |
 | `port` | LAN WebSocket port the Voice PE connects to (default 8080) |

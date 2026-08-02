@@ -66,6 +66,7 @@ class Bridge(DeepslateSessionListener):
         self._replying = False     # this turn already produced audible audio
         self._closed = False
         self._last_activity = 0.0
+        self._bg_active = False
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -118,6 +119,7 @@ class Bridge(DeepslateSessionListener):
         if unstick and not self._closed:
             self._replying = False
             await self._conn.send_phase("idle")
+            await self._stop_bg()
 
     # -- DeviceHandler (device -> bridge) --------------------------------------
 
@@ -130,6 +132,11 @@ class Bridge(DeepslateSessionListener):
         self._replying = False
         self._up.reset()
         self._ensure_session()
+        # Session-scoped background ambience on the device's media channel.
+        # Guarded so a wake during an active session doesn't restart the track.
+        if self._settings.background_audio_url and not self._bg_active:
+            self._bg_active = True
+            await self._conn.send_bg_start(self._settings.background_audio_url)
         # Refresh the HA snapshot in the background so the running executor
         # (and the next session's prompt) see current areas/lights/states.
         asyncio.create_task(self._refresh_snapshot())
@@ -145,11 +152,18 @@ class Bridge(DeepslateSessionListener):
     async def on_interrupt(self) -> None:
         logger.info("device interrupt (stop): suppressing model audio until next turn")
         self._suppressed = True
+        await self._stop_bg()
 
     async def on_flush(self) -> None:
         logger.info("follow-up window expired: suppressing until next turn")
         self._suppressed = True
         self._up.reset()
+        await self._stop_bg()
+
+    async def _stop_bg(self) -> None:
+        if self._bg_active:
+            self._bg_active = False
+            await self._conn.send_bg_stop()
 
     async def on_audio(self, pcm16k: bytes) -> None:
         pcm24k = self._up.process(pcm16k)

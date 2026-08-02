@@ -6,6 +6,8 @@ from deepslate.core import (
     DeepslateOptions,
     DeepslateSession,
     DeepslateSessionListener,
+    ElevenLabsTtsConfig,
+    ElevenLabsVoiceSettingsConfig,
     HostedTtsConfig,
     VadConfig,
 )
@@ -49,6 +51,28 @@ def build_system_prompt(snapshot: dict, settings: Settings) -> str:
     return "\n\n".join(lines)
 
 
+def build_tts_config(settings: Settings):
+    """TTS provider from config: Deepslate-hosted voice or ElevenLabs."""
+    if settings.tts_provider == "elevenlabs":
+        opt = lambda v: v if v >= 0 else None  # noqa: E731 — -1 sentinel = provider default
+        voice_settings = ElevenLabsVoiceSettingsConfig(
+            stability=opt(settings.elevenlabs_stability),
+            similarity_boost=opt(settings.elevenlabs_similarity_boost),
+            style=opt(settings.elevenlabs_style),
+            use_speaker_boost=settings.elevenlabs_speaker_boost or None,
+            speed=opt(settings.elevenlabs_speed),
+        )
+        return ElevenLabsTtsConfig(
+            api_key=settings.elevenlabs_api_key,
+            voice_id=settings.voice_id,
+            model_id=settings.elevenlabs_model_id or None,
+            voice_settings=voice_settings,
+        )
+    if settings.voice_id:
+        return HostedTtsConfig(voice_id=settings.voice_id)
+    return None
+
+
 def create_session(
     settings: Settings, system_prompt: str, listener: DeepslateSessionListener
 ) -> DeepslateSession:
@@ -70,7 +94,7 @@ def create_session(
         stop_duration_ms=700,
         backbuffer_duration_ms=1000,
     )
-    tts = HostedTtsConfig(voice_id=settings.voice_id) if settings.voice_id else None
+    tts = build_tts_config(settings)
     return DeepslateSession.create(
         options,
         vad_config=vad,

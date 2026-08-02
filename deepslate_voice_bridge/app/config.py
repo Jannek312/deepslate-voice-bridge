@@ -37,6 +37,19 @@ class Settings:
     language: str = "auto"
     extra_prompt: str = ""
     output_gain: float = 1.0
+    # TTS provider: "hosted" (Deepslate voice, uses voice_id) or "elevenlabs"
+    # (uses voice_id as the ElevenLabs voice + the fields below).
+    tts_provider: str = "hosted"
+    elevenlabs_api_key: str = ""
+    elevenlabs_model_id: str = ""
+    elevenlabs_stability: float = -1.0        # -1 = provider default
+    elevenlabs_similarity_boost: float = -1.0
+    elevenlabs_style: float = -1.0
+    elevenlabs_speaker_boost: bool = False
+    elevenlabs_speed: float = -1.0
+    # Ambient audio played on the device's media channel from wake word until
+    # the session returns to idle. Empty = disabled.
+    background_audio_url: str = ""
     port: int = 8080
     ha_url: str = ""
     ha_token: str = ""

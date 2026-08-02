@@ -63,6 +63,12 @@ class DeviceConnection:
     async def send_pong(self) -> None:
         await self._send_json({"type": "pong"})
 
+    async def send_bg_start(self, url: str) -> None:
+        await self._send_json({"type": "bg", "action": "start", "url": url})
+
+    async def send_bg_stop(self) -> None:
+        await self._send_json({"type": "bg", "action": "stop"})
+
     async def send_audio(self, pcm24k: bytes) -> None:
         try:
             await self._ws.send(pcm24k)

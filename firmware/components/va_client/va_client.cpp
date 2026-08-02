@@ -402,6 +402,8 @@ void VaClient::on_ws_event(int32_t event_id, void *event_data) {
     case WEBSOCKET_EVENT_ERROR: {
       if (this->ws_connected_) {
         ESP_LOGW(TAG, "WS disconnected (event %d)", (int) event_id);
+        // Bridge is gone — it can never send the bg stop; kill ambience here.
+        this->fire_phase_led_("bg_stop");
       }
       this->ws_connected_ = false;
       // Connection broke before the stability window elapsed — keep the
@@ -508,6 +510,35 @@ void VaClient::handle_text_(const char *data, size_t len) {
   // DEEPSLATE VARIANT: LED-only hints. Drive the ring (yaml on_phase automation)
   // WITHOUT touching set_phase_'s state machine (mic gating, suppression,
   // watchdogs). Values are deliberately distinct from the real phase names.
+  // DEEPSLATE VARIANT: session background audio. The bridge sends
+  // {"type":"bg","action":"start","url":"..."} on wake and a stop at session
+  // end; yaml plays/stops the URL on the media mixer channel (on_phase
+  // automation, triggers "bg_start"/"bg_stop"). URL is stored on the main
+  // loop (defer) so the yaml lambda reads it race-free.
+  if (msg.find("\"type\":\"bg\"") != std::string::npos) {
+    if (msg.find("\"action\":\"start\"") != std::string::npos) {
+      std::string url;
+      const std::string key = "\"url\":\"";
+      auto pos = msg.find(key);
+      if (pos != std::string::npos) {
+        auto end = msg.find('"', pos + key.size());
+        if (end != std::string::npos)
+          url = msg.substr(pos + key.size(), end - pos - key.size());
+      }
+      this->defer([this, url]() {
+        this->bg_url_ = url;
+        for (auto *t : this->phase_triggers_)
+          t->trigger("bg_start");
+      });
+    } else if (msg.find("\"action\":\"stop\"") != std::string::npos) {
+      this->defer([this]() {
+        for (auto *t : this->phase_triggers_)
+          t->trigger("bg_stop");
+      });
+    }
+    return;
+  }
+
   static const char *const kLedHints[] = {"user_speech", "tool_call", "hint_clear"};
   for (const char *h : kLedHints) {
     std::string needle = std::string("\"value\":\"") + h + "\"";

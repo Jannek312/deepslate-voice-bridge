@@ -67,3 +67,38 @@ def test_no_options_file_env_only(tmp_path, monkeypatch):
     s = Settings.load()
     assert s.org_id == "o"
     assert s.follow_up_ms == 8000
+
+
+def test_tts_provider_config(tmp_path, monkeypatch):
+    _base_env(tmp_path, monkeypatch, {
+        "vendor_id": "v", "org_id": "o", "api_key": "k",
+        "tts_provider": "elevenlabs", "voice_id": "el-voice",
+        "elevenlabs_api_key": "el-key", "elevenlabs_model_id": "eleven_turbo_v2",
+        "elevenlabs_stability": 0.4, "background_audio_url": "https://x/a.mp3",
+    })
+    s = Settings.load()
+    assert s.tts_provider == "elevenlabs"
+    assert s.elevenlabs_api_key == "el-key"
+    assert s.elevenlabs_stability == 0.4
+    assert s.elevenlabs_speed == -1.0
+    assert s.background_audio_url == "https://x/a.mp3"
+
+
+def test_build_tts_config_variants(tmp_path, monkeypatch):
+    from app.deepslate import build_tts_config
+    from deepslate.core import ElevenLabsTtsConfig, HostedTtsConfig
+
+    _base_env(tmp_path, monkeypatch, None)
+    s = Settings(voice_id="hosted-v")
+    assert isinstance(build_tts_config(s), HostedTtsConfig)
+
+    s = Settings(voice_id="el-v", tts_provider="elevenlabs",
+                 elevenlabs_api_key="k", elevenlabs_stability=0.3)
+    cfg = build_tts_config(s)
+    assert isinstance(cfg, ElevenLabsTtsConfig)
+    assert cfg.voice_id == "el-v"
+    assert cfg.model_id is None
+    assert cfg.voice_settings.stability == 0.3
+    assert cfg.voice_settings.speed is None
+
+    assert build_tts_config(Settings()) is None

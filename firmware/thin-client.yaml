@@ -289,6 +289,11 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
+  # DEEPSLATE VARIANT: true while session background audio is playing.
+  - id: va_bg_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
   # Global variable tracking if the dial was recently touched.
   - id: dial_touched
@@ -1857,6 +1862,13 @@ media_player:
   - platform: speaker_source
     id: external_media_player
     name: Media Player
+    on_idle:
+      # DEEPSLATE VARIANT: loop the session background track until bg_stop.
+      - if:
+          condition:
+            lambda: 'return id(va_bg_active) && !id(va)->get_bg_url().empty();'
+          then:
+            - lambda: 'id(external_media_player).make_call().set_media_url(id(va)->get_bg_url()).set_announcement(false).perform();'
     announcement_pipeline:
       format: FLAC
       num_channels: 1
@@ -2027,6 +2039,44 @@ va_client:
           id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
         }
     - script.execute: control_leds
+    # DEEPSLATE VARIANT: session background audio on the media mixer channel.
+    - if:
+        condition:
+          lambda: 'return phase == "bg_start";'
+        then:
+          - lambda: |-
+              if (!id(va)->get_bg_url().empty()) {
+                id(va_bg_active) = true;
+                id(external_media_player).make_call().set_media_url(id(va)->get_bg_url()).set_announcement(false).perform();
+              }
+    - if:
+        condition:
+          lambda: 'return phase == "bg_stop" && id(va_bg_active);'
+        then:
+          - lambda: 'id(va_bg_active) = false;'
+          - media_player.stop:
+              id: external_media_player
+          - mixer_speaker.apply_ducking:
+              id: media_mixing_input
+              decibel_reduction: 0
+              duration: 0.5s
+    # Duck the ambience while the assistant talks; restore between turns.
+    - if:
+        condition:
+          lambda: 'return id(va_bg_active) && phase == "replying";'
+        then:
+          - mixer_speaker.apply_ducking:
+              id: media_mixing_input
+              decibel_reduction: 12
+              duration: 0.2s
+    - if:
+        condition:
+          lambda: 'return id(va_bg_active) && (phase == "idle" || phase == "listening");'
+        then:
+          - mixer_speaker.apply_ducking:
+              id: media_mixing_input
+              decibel_reduction: 4
+              duration: 0.7s
     # va-direct: re-arm the wake word whenever we return to idle. micro_wake_word
     # is the sole owner that starts the i2s_mics stream in this fork, so this
     # guarantees detection is running again after every session teardown / WS

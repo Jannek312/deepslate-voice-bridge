@@ -240,3 +240,38 @@ async def test_disconnect_closes_session(bridge):
     await bridge.on_disconnect()
     assert session.closed
     assert bridge._session is None
+
+
+async def test_background_audio_lifecycle(monkeypatch):
+    FakeSession.instances = []
+    import app.bridge as bm
+    monkeypatch.setattr(bm, "create_session", lambda s, p, listener: FakeSession())
+    conn = FakeConn()
+    conn.bg = []
+    conn.send_bg_start = lambda url: _record(conn, ("start", url))
+    conn.send_bg_stop = lambda: _record(conn, ("stop",))
+    settings = Settings(vendor_id="v", org_id="o", api_key="k",
+                        background_audio_url="https://x/amb.mp3")
+    b = Bridge(conn, settings, FakeHA())
+    await b.start()
+    await b.on_wake()
+    assert conn.bg == [("start", "https://x/amb.mp3")]
+    await b.on_wake()  # second wake inside session: no restart
+    assert len(conn.bg) == 1
+    await b.on_flush()  # session over
+    assert conn.bg[-1] == ("stop",)
+    await b.on_wake()   # new session restarts it
+    assert conn.bg[-1] == ("start", "https://x/amb.mp3")
+    await b.on_interrupt()
+    assert conn.bg[-1] == ("stop",)
+
+
+def _record(conn, item):
+    async def _coro():
+        conn.bg.append(item)
+    return _coro()
+
+
+async def test_no_background_audio_when_unconfigured(bridge):
+    await wake(bridge)  # bridge fixture has no bg url; FakeConn lacks send_bg_start
+    # reaching here without AttributeError proves no bg calls were attempted

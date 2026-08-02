@@ -51,6 +51,10 @@ class VaClient : public Component {
 
   bool is_connected() const { return ws_connected_; }
 
+  // Background-audio URL from the bridge's last {"type":"bg"} start message.
+  // Written and read on the main loop only (defer in handle_text_).
+  const std::string &get_bg_url() const { return bg_url_; }
+
   // Delay (ms) the yaml wake handler waits after the wake chime before opening
   // the mic, so the chime's i2s/DAC tail can't leak into the fresh mic and
   // become a ghost turn. Pushed from the backend `hello` (wake_open_delay_ms);
@@ -113,6 +117,7 @@ class VaClient : public Component {
   void open_followup_window_(uint32_t duration_ms);
 
   std::string url_;
+  std::string bg_url_;
   uint8_t mic_channel_{0};
 
   microphone::Microphone *mic_{nullptr};
