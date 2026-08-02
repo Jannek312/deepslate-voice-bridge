@@ -2088,16 +2088,15 @@ micro_wake_word:
     gain_factor: 4
   stop_after_detection: false
   models:
-    # DEEPSLATE VARIANT: stock "Okay Nabu" start wake word while a genuine
-    # "Hey GLaDOS" microWakeWord model is trained (the community "glados"
-    # tflites are openWakeWord models — float32, 96 features, RSQRT/SUB ops —
-    # and crash micro_wake_word's arena probe).
+    # DEEPSLATE VARIANT: self-trained "Hey GLaDOS" microWakeWord model
+    # (50k Piper samples, calibrated cutoff 0.95 @ 99.25% recall, 0 FA/h;
+    # trained 2026-08-02 with microWakeWord-Trainer-AppleSilicon).
     # The stock start words (okay_nabu / hey_jarvis / hey_mycroft) were
     # removed on purpose. "stop" stays — it's the reliable barge-in/interrupt
     # word, armed only while the assistant is replying (see on_phase below).
     # kahrendt/microWakeWord redirects to the OHF-Voice org automatically.
-    - model: https://github.com/kahrendt/microWakeWord/releases/download/okay_nabu_20241226.3/okay_nabu.json
-      id: okay_nabu
+    - model: models/hey_glados.json
+      id: hey_glados
     - model: https://github.com/kahrendt/microWakeWord/releases/download/stop/stop.json
       id: stop
       internal: true
@@ -2329,11 +2328,11 @@ select:
       # accepts. Spacing mirrors the proven okay_nabu tiers.
       lambda: |-
         if (x == "Slightly sensitive") {
-          id(okay_nabu).set_probability_cutoff(217);   // ~0.85
+          id(hey_glados).set_probability_cutoff(247);   // ~0.97
         } else if (x == "Moderately sensitive") {
-          id(okay_nabu).set_probability_cutoff(178);   // ~0.70
+          id(hey_glados).set_probability_cutoff(242);   // ~0.95 (calibrated: 99.25% recall, 0 FA/h)
         } else if (x == "Very sensitive") {
-          id(okay_nabu).set_probability_cutoff(140);   // ~0.55
+          id(hey_glados).set_probability_cutoff(230);   // ~0.90
         }
 
 
