@@ -275,3 +275,52 @@ def _record(conn, item):
 async def test_no_background_audio_when_unconfigured(bridge):
     await wake(bridge)  # bridge fixture has no bg url; FakeConn lacks send_bg_start
     # reaching here without AttributeError proves no bg calls were attempted
+
+
+async def test_mcp_mode_tools_and_routing(monkeypatch):
+    FakeSession.instances = []
+    import app.bridge as bm
+    monkeypatch.setattr(bm, "create_session", lambda s, p, listener: FakeSession())
+
+    class FakeMCP:
+        def __init__(self):
+            self.calls = []
+        async def get_tools(self):
+            return [{"type": "function", "function": {"name": "HassTurnOn",
+                     "description": "d", "parameters": {"type": "object"}}}]
+        async def execute(self, name, params):
+            self.calls.append((name, params))
+            return "Turned on"
+        async def close(self):
+            pass
+
+    conn = FakeConn()
+    b = Bridge(conn, Settings(vendor_id="v", org_id="o", api_key="k", tools_mode="mcp"), FakeHA())
+    fake_mcp = FakeMCP()
+    b._mcp = fake_mcp
+    await b.start()
+    session = await wake(b)
+    assert [t["function"]["name"] for t in session.tools] == ["HassTurnOn"]
+    b.conn = conn
+    await b.on_tool_call("c1", "HassTurnOn", {"name": "kitchen"})
+    assert fake_mcp.calls == [("HassTurnOn", {"name": "kitchen"})]
+    assert session.tool_responses[-1] == ("c1", "Turned on")
+
+
+async def test_mcp_failure_falls_back_to_light_tools(monkeypatch):
+    FakeSession.instances = []
+    import app.bridge as bm
+    monkeypatch.setattr(bm, "create_session", lambda s, p, listener: FakeSession())
+
+    class BrokenMCP:
+        async def get_tools(self):
+            raise ConnectionError("mcp down")
+        async def close(self):
+            pass
+
+    b = Bridge(FakeConn(), Settings(vendor_id="v", org_id="o", api_key="k", tools_mode="mcp"), FakeHA())
+    b._mcp = BrokenMCP()
+    await b.start()
+    session = await wake(b)
+    names = {t["function"]["name"] for t in session.tools}
+    assert names == {"control_lights", "get_lights"}  # graceful fallback

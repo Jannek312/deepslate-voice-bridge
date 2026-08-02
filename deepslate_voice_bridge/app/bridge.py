@@ -36,6 +36,7 @@ from app.config import Settings
 from app.deepslate import SESSION_CHANNELS, SESSION_SAMPLE_RATE, build_system_prompt, create_session
 from app.device_server import DeviceConnection
 from app.ha_client import HAClient
+from app.mcp_tools import MCPTools
 from app.tools import TOOL_DEFINITIONS, ToolExecutor
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,11 @@ class Bridge(DeepslateSessionListener):
         self._closed = False
         self._last_activity = 0.0
         self._bg_active = False
+        self._mcp = (
+            MCPTools(settings.ha_url, settings.ha_token)
+            if settings.tools_mode == "mcp"
+            else None
+        )
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -90,7 +96,7 @@ class Bridge(DeepslateSessionListener):
             session.start()
             # Tools BEFORE initialize: pre-init update_tools only stores the
             # list; the SDK sends it right after InitializeSessionRequest.
-            await session.update_tools(TOOL_DEFINITIONS)
+            await session.update_tools(await self._tool_definitions())
             # SDK footgun: initialize() silently no-ops while the WS is still
             # connecting. Poll until the server confirms with SessionReady.
             deadline = time.monotonic() + SESSION_READY_TIMEOUT_S
@@ -103,6 +109,16 @@ class Bridge(DeepslateSessionListener):
         except Exception as e:
             logger.error("could not open deepslate session: %r", e)
             await self._teardown(self._session, unstick=True)
+
+    async def _tool_definitions(self) -> list[dict]:
+        if self._mcp is None:
+            return TOOL_DEFINITIONS
+        try:
+            return await self._mcp.get_tools()
+        except Exception as e:
+            logger.error("HA MCP unavailable (%r) — falling back to built-in light tools", e)
+            await self._mcp.close()
+            return TOOL_DEFINITIONS
 
     async def _teardown(self, session, unstick: bool) -> None:
         """Drop the session (idempotent). unstick=True nudges the device LEDs."""
@@ -205,6 +221,8 @@ class Bridge(DeepslateSessionListener):
         if self._open_task is not None:
             self._open_task.cancel()
         await self._teardown(self._session, unstick=False)
+        if self._mcp is not None:
+            await self._mcp.close()
 
     # -- DeepslateSessionListener (Deepslate -> bridge) ------------------------
 
@@ -279,7 +297,11 @@ class Bridge(DeepslateSessionListener):
         logger.info("tool call %s(%s)", name, params)
         # LED hint: dark blue ring while the tool executes.
         await self._conn.send_phase("tool_call")
-        result = await self._executor.execute(name, params)
+        known_builtin = {t["function"]["name"] for t in TOOL_DEFINITIONS}
+        if self._mcp is not None and name not in known_builtin:
+            result = await self._mcp.execute(name, params)
+        else:
+            result = await self._executor.execute(name, params)
         logger.info("tool result: %.200s", result)
         await self._session.send_tool_response(call_id, result)
         await self._conn.send_phase("hint_clear")

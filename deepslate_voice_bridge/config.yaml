@@ -1,5 +1,5 @@
 name: Deepslate Voice Bridge
-version: "0.2.1"
+version: "0.3.0"
 slug: deepslate_voice_bridge
 description: >-
   Connects Home Assistant Voice PE devices (thin-client firmware) to
@@ -32,6 +32,7 @@ options:
   elevenlabs_speaker_boost: false
   elevenlabs_speed: -1.0
   background_audio_url: ""
+  tools_mode: "lights"
 
   port: 8080
   follow_up_ms: 8000
@@ -57,6 +58,7 @@ schema:
   elevenlabs_speaker_boost: bool
   elevenlabs_speed: float(-1,2.0)
   background_audio_url: str?
+  tools_mode: list(lights|mcp)
 
   port: port
   follow_up_ms: int(0,60000)

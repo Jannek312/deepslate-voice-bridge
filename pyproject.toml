@@ -8,6 +8,7 @@ dependencies = [
     "aiohttp>=3.10",
     "protobuf>=5.27",
     "deepslate-core>=0.1.15",
+    "mcp>=1.2",
 ]
 
 [dependency-groups]

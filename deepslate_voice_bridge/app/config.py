@@ -50,6 +50,9 @@ class Settings:
     # Ambient audio played on the device's media channel from wake word until
     # the session returns to idle. Empty = disabled.
     background_audio_url: str = ""
+    # Tool backend: "lights" (built-in light tools) or "mcp" (Home Assistant's
+    # MCP Server integration — full access to everything exposed to Assist).
+    tools_mode: str = "lights"
     port: int = 8080
     ha_url: str = ""
     ha_token: str = ""

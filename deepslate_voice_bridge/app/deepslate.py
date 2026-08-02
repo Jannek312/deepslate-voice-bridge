@@ -84,6 +84,14 @@ def build_system_prompt(snapshot: dict, settings: Settings) -> str:
     else:
         lines.append("LANGUAGE: Answer in the language the user speaks to you.")
 
+    if settings.tools_mode == "mcp":
+        lines.append(
+            "You have tools covering every device the subject has exposed to "
+            "you (lights, covers, climate, media, scripts, and live state via "
+            "GetLiveContext). Use them for any home-control request. The "
+            "lighting inventory below is only the illumination subset."
+        )
+
     inventory = ["The home has these areas and lights:"]
     for area in snapshot["areas"]:
         names = ", ".join(light["name"].strip() for light in area["lights"])
