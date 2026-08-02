@@ -102,3 +102,17 @@ def test_build_tts_config_variants(tmp_path, monkeypatch):
     assert cfg.voice_settings.speed is None
 
     assert build_tts_config(Settings()) is None
+
+
+def test_glados_system_prompt(tmp_path, monkeypatch):
+    from app.deepslate import build_system_prompt
+
+    _base_env(tmp_path, monkeypatch, None)
+    snapshot = {"areas": [{"id": "bedroom", "name": "Bedroom",
+                           "lights": [{"entity_id": "light.b", "name": "Iris", "state": "on"}]}]}
+    prompt = build_system_prompt(snapshot, Settings(language="English", extra_prompt="Extra."))
+    assert "GLaDOS" in prompt
+    assert "control_lights" in prompt and "get_lights" in prompt
+    assert "Bedroom: Iris" in prompt          # dynamic inventory survives
+    assert "English" in prompt                # language directive survives
+    assert prompt.rstrip().endswith("Extra.") # extra_prompt still appended
