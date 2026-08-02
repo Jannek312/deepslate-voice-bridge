@@ -35,6 +35,14 @@
 ### Deepslate session config
 `InitializeSessionRequest`: input line 16000/1/SIGNED_16_BIT; output line 24000/1/SIGNED_16_BIT (no resampling anywhere); `vad_configuration` (confidence 0.6, min_volume 0.05, start 96ms, stop 700ms, backbuffer 1s — tune live); `inference_configuration.system_prompt` built at session start from HA areas/lights; `tts_configuration.hosted.voice_ref.voice_id` from config (mode HIGH_QUALITY); `supports_playback_reporting=false` (device reports no playback position; server estimates). Then `UpdateToolDefinitionsRequest` immediately after init. Audio sent as `UserInput{packet_id: monotonic, mode: <UserInput mode decided in Task 4 from deepslate-pipecat reference>, audio_data}`.
 
+> **DEVIATION 2 (recorded during execution):** Deepslate terminates sessions
+> after 30 s without protocol messages, and Jannek prefers no parked sessions.
+> Sessions are therefore **lazy**: opened on `wake` (mic audio buffered until
+> `SessionReady`, connect overlaps the utterance), closed by the server's
+> inactivity cut, which the bridge treats as normal end-of-conversation. The
+> "device connects → ensure session" row below is superseded; each wake also
+> refreshes the HA snapshot.
+
 ### Event mapping (bridge core)
 | Trigger | Action |
 |---|---|
@@ -119,6 +127,16 @@ def test_proto_roundtrip():
 **Interfaces produced:** `class HAClient(base_url, token)`: `async call_service(domain, service, data) -> dict`; `async render_template(template: str) -> str`; `async lights_snapshot() -> dict` returning `{areas: [{id, name, lights: [{entity_id, name, state}]}]}` built via the template API (`{{ areas() }}`, `{{ area_name(a) }}`, `{{ area_entities(a) | select('match','light\\.') }}`, `{{ state_attr(e,'friendly_name') }}`, `{{ states(e) }}` — one combined Jinja template returning JSON via `| tojson`); `async close()`.
 
 - [ ] Test with `aiohttp.test_utils` fake HA server asserting auth header, `POST /api/template` body, `POST /api/services/light/turn_on` passthrough, snapshot parsing. Implement. Commit.
+
+> **DEVIATION (recorded during execution):** Task 4 is implemented with the official
+> `deepslate-core` SDK (found on PyPI during Task 4 Step 1) instead of a hand-rolled
+> protobuf client. It provides `DeepslateSession` + `DeepslateSessionListener` with
+> exactly the events the bridge needs, internal reconnect-with-backoff, and buffered
+> sends. Consequences: (a) vendored proto/generated pb2 removed; (b) the session runs
+> at 24 kHz both directions (SDK uses one audio line config), so the bridge upsamples
+> mic audio 16k→24k in `app/audio.py` (same as the OpenAI reference add-on does);
+> (c) audio `UserInput.mode` follows the SDK default `IMMEDIATE`; (d) tool defs use
+> the SDK's `FunctionToolDict` shape `{"type":"function","function":{name,description,parameters}}`.
 
 ### Task 4: Deepslate client (deepslate_client.py)
 

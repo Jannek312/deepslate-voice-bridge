@@ -1,0 +1,44 @@
+name: Deepslate Voice Bridge
+version: "0.1.0"
+slug: deepslate_voice_bridge
+description: >-
+  Connects Home Assistant Voice PE devices (thin-client firmware) to
+  Deepslate Realtime (Opal speech-to-speech) with light control tools.
+url: https://github.com/Jannek312/deepslate-voice-bridge
+arch:
+  - aarch64
+  - amd64
+init: false
+# The Voice PE connects over the LAN; host networking keeps the WS port
+# reachable at homeassistant.local:<port> without ingress plumbing.
+host_network: true
+# Grants SUPERVISOR_TOKEN with access to the core API (http://supervisor/core).
+homeassistant_api: true
+options:
+  vendor_id: ""
+  org_id: ""
+  api_key: ""
+  base_url: "https://app.deepslate.eu"
+  voice_id: ""
+  language: "auto"
+  extra_prompt: ""
+  port: 8080
+  follow_up_ms: 8000
+  follow_up_open_delay_ms: 700
+  wake_open_delay_ms: 700
+  playback_prebuffer_ms: 150
+  log_level: info
+schema:
+  vendor_id: str
+  org_id: str
+  api_key: password
+  base_url: url
+  voice_id: str?
+  language: str?
+  extra_prompt: str?
+  port: port
+  follow_up_ms: int(0,60000)
+  follow_up_open_delay_ms: int(0,5000)
+  wake_open_delay_ms: int(0,5000)
+  playback_prebuffer_ms: int(0,2000)
+  log_level: list(debug|info|warning|error)
