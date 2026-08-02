@@ -1,5 +1,5 @@
 name: Deepslate Voice Bridge
-version: "0.3.0"
+version: "0.3.1"
 slug: deepslate_voice_bridge
 description: >-
   Connects Home Assistant Voice PE devices (thin-client firmware) to
