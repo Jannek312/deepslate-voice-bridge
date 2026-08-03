@@ -10,3 +10,7 @@ firmware/.esphome/
 __pycache__/
 .pytest_cache/
 training-glados/
+
+# exported HA logs — never commit
+supervisor_*.log
+*.log
